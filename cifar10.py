@@ -46,6 +46,12 @@ def _load_data(filename):
     
     return images, cls
 
+def one_hot_encoded(class_numbers, num_classes=None):
+    if num_classes is None:
+        num_classes = np.max(class_numbers) - 1
+
+    return np.eye(num_classes, dtype=float)[class_numbers]
+
 def load_class_names():
     raw = _get_batches_meta()[b'label_names']
     return [x.decode('utf-8') for x in raw]
@@ -57,7 +63,7 @@ def load_training_data():
     num_images_train = _num_files_train * num_cases_per_batch()
     
     images = np.zeros(shape=[num_images_train, img_size, img_size, num_channels], dtype=float)
-    cls = np.zeros(shape=[num_images_train], dtype=float)
+    cls = np.zeros(shape=[num_images_train], dtype=int)
     
     begin = 0
     
@@ -69,11 +75,11 @@ def load_training_data():
         cls[begin:end] = cls_batch
         begin = end
     
-    return images, cls, None # TODO: one_hot_encoded
+    return images, cls, one_hot_encoded(class_numbers=cls, num_classes=len(load_class_names()))
 
 def load_test_data():
     images, cls = _load_data(filename='test_batch')
-    return images, cls, None
+    return images, cls, one_hot_encoded(class_numbers=cls, num_classes=len(load_class_names()))
 
 def maybe_download_and_extract():
     download.maybe_download_and_extract(url=data_url, download_dir=data_path)
