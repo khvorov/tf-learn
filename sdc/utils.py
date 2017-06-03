@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH = 160, 320
-IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS = 80, 160, 3
+IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS = 66, 200, 3
 INPUT_SHAPE = (IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS)
 
 class ImageLoader:
@@ -14,9 +14,9 @@ class ImageLoader:
 
         print('Loading %d images from %s...' % (n_images, data_dir))
 
-        self.center = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
-        self.left = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
-        self.right = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
+        self.center = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
+        self.left = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
+        self.right = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
         
         for idx, img in enumerate(image_paths):
             center, left, right = img
@@ -40,7 +40,7 @@ def rgb2yuv(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
 
 def preprocess(image):
-    return rgb2yuv(resize(image))
+    return rgb2yuv(resize(crop(image)))
 
 # augument the image
 def choose_image(image_loader, idx, steering_angle):
@@ -67,13 +67,13 @@ def random_translate(img, range_x, range_y):
 def random_brightness(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     ratio = 1.0 + 0.2 * (np.random.rand() - 0.5)
-    hsv[:, :, 2] = hsv[:, :, 2] * ratio
-    return cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+    hsv[:, :, 2] *= ratio
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
 def augument(img, range_x=100, range_y=10):
     img = random_flip(img)
     img = random_brightness(img)
-    img = random_translate(img, range_x, range_y)
+    # img = random_translate(img, range_x, range_y)
     return img
 
 def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_training):
@@ -83,17 +83,22 @@ def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_train
     steers = np.empty(batch_size)
 
     while True:
+        perm = np.random.permutation(il.n_images)
         i = 0
-        for index in np.random.permutation(il.n_images):
-            steering_angle = steering_angles[index]
-            if is_training:
-                image, steering_angle = choose_image(il, index, steering_angle)
-            else:
-                image = il.center[index]
-            images[i] = preprocess(image)
-            steers[i] = steering_angle
-            i += 1
-            if i == batch_size:
-                break
-        yield images, steers
+
+        # TODO: create one mre generator
+        while i < il.n_images:
+            bs = np.min([batch_size, il.n_images - i])
+            idxs = perm[i:(i + bs)]
+            i += bs
+            for k, j in enumerate(idxs):
+                steering_angle = steering_angles[j]
+                if is_training:
+                    image, steering_angle = choose_image(il, j, steering_angle)
+#                    image = augument(image)
+                else:
+                    image = il.center[j]
+                images[k] = preprocess(image)
+                steers[k] = steering_angle
+            yield images, steers
 
