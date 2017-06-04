@@ -47,6 +47,7 @@ def train_model(args, model, X_train, X_test, y_train, y_test):
     model.fit_generator(batch_generator(args.data_dir, X_train, y_train, args.batch_size, True),
                         args.samples_per_epoch,
                         args.n_epochs,
+#                        workers=4,
 #                        max_q_size=1,
                         validation_data=batch_generator(args.data_dir, X_test, y_test, args.batch_size, False),
                         validation_steps=len(X_test),

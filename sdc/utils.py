@@ -1,3 +1,4 @@
+import concurrent.futures
 import cv2
 import matplotlib.image as mpimg
 import numpy as np
@@ -76,29 +77,97 @@ def augument(img, range_x=100, range_y=10):
     # img = random_translate(img, range_x, range_y)
     return img
 
+def random_batch(n_images, batch_size):
+    perm = np.random.permutation(n_images)
+    i = 0
+
+    while i < n_images:
+        bs = np.min([batch_size, n_images - i])
+        yield perm[i:(i + bs)]
+        i += bs
+
+def process_mini_batch(indexes, il, steering_angles, is_training):
+    batch_size = indexes.shape[0]
+    images = np.empty([batch_size, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS])
+    steers = np.empty(batch_size)
+
+    for k, j in enumerate(indexes):
+        steering_angle = steering_angles[j]
+        if is_training:
+            image, steering_angle = choose_image(il, j, steering_angle)
+            image = augument(image)
+        else:
+            image = il.center[j]
+        images[k] = preprocess(image)
+        steers[k] = steering_angle
+    
+    return images, steers
+
 def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_training):
     il = ImageLoader(data_dir, image_paths)
 
     images = np.empty([batch_size, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS])
     steers = np.empty(batch_size)
 
-    while True:
-        perm = np.random.permutation(il.n_images)
-        i = 0
+    num_workers = 4
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=num_workers)
 
-        # TODO: create one mre generator
-        while i < il.n_images:
-            bs = np.min([batch_size, il.n_images - i])
-            idxs = perm[i:(i + bs)]
-            i += bs
-            for k, j in enumerate(idxs):
-                steering_angle = steering_angles[j]
-                if is_training:
-                    image, steering_angle = choose_image(il, j, steering_angle)
-#                    image = augument(image)
+    while True:
+        for indexes in random_batch(il.n_images, batch_size):
+            fut = [ executor.submit(process_mini_batch, mb, il, steering_angles, is_training) for mb in np.array_split(indexes, num_workers) ]
+
+            j = 0
+            for f in concurrent.futures.as_completed(fut):
+                try:
+                    i, s = f.result()
+                except Exception as e:
+                    print('Caught an exception: ', e)
                 else:
-                    image = il.center[j]
-                images[k] = preprocess(image)
-                steers[k] = steering_angle
+#                    print('got {0} images and {1} steers'.format(i.shape, s.shape))
+                    s = i.shape[0]
+                    images[j:(j+s)] = i
+                    steers[j:(j+s)] = s
+                    j += s
             yield images, steers
+
+def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_training):
+    """ Use multiprocessing to generate batches in parallel. """
+    try:
+        queue = multiprocessing.Queue(maxsize=max_q_size)
+
+        # define producer (putting items into queue)
+        def producer():
+
+            try:
+                # Put the data in a queue
+                queue.put((X, y))
+
+            except:
+                print("Nothing here")
+
+        processes = []
+
+        def start_process():
+            for i in range(len(processes), maxproc):
+                thread = multiprocessing.Process(target=producer)
+                time.sleep(0.01)
+                thread.start()
+                processes.append(thread)
+
+        # run as consumer (read items from queue, in current thread)
+        while True:
+            processes = [p for p in processes if p.is_alive()]
+
+            if len(processes) < maxproc:
+                start_process()
+
+            yield queue.get()
+
+    except:
+        print("Finishing")
+        for th in processes:
+            th.terminate()
+        queue.close()
+        raise
+
 
