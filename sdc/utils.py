@@ -15,10 +15,10 @@ class ImageLoader:
 
         print('Loading %d images from %s...' % (n_images, data_dir))
 
-        self.center = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
-        self.left = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
-        self.right = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.float32)
-        
+        self.center = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
+        self.left = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
+        self.right = np.empty([n_images, ORIGINAL_IMAGE_HEIGHT, ORIGINAL_IMAGE_WIDTH, IMAGE_CHANNELS], dtype=np.uint8)
+
         for idx, img in enumerate(image_paths):
             center, left, right = img
             self.center[idx] = self._load_image(data_dir, center)
@@ -68,13 +68,13 @@ def random_translate(img, range_x, range_y):
 def random_brightness(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     ratio = 1.0 + 0.2 * (np.random.rand() - 0.5)
-    hsv[:, :, 2] *= ratio
+    hsv[:, :, 2] = hsv[:, :, 2] * ratio
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
 def augument(img, range_x=100, range_y=10):
     img = random_flip(img)
     img = random_brightness(img)
-    # img = random_translate(img, range_x, range_y)
+    img = random_translate(img, range_x, range_y)
     return img
 
 def random_batch(n_images, batch_size):
@@ -100,7 +100,7 @@ def process_mini_batch(indexes, il, steering_angles, is_training):
             image = il.center[j]
         images[k] = preprocess(image)
         steers[k] = steering_angle
-    
+
     return images, steers
 
 def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_training):
@@ -119,55 +119,13 @@ def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_train
             j = 0
             for f in concurrent.futures.as_completed(fut):
                 try:
-                    i, s = f.result()
+                    img_batch, st_batch = f.result()
                 except Exception as e:
                     print('Caught an exception: ', e)
                 else:
-#                    print('got {0} images and {1} steers'.format(i.shape, s.shape))
-                    s = i.shape[0]
-                    images[j:(j+s)] = i
-                    steers[j:(j+s)] = s
-                    j += s
+                    sz = img_batch.shape[0]
+                    images[j:(j+sz)] = img_batch
+                    steers[j:(j+sz)] = st_batch
+                    j += sz
             yield images, steers
-
-def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_training):
-    """ Use multiprocessing to generate batches in parallel. """
-    try:
-        queue = multiprocessing.Queue(maxsize=max_q_size)
-
-        # define producer (putting items into queue)
-        def producer():
-
-            try:
-                # Put the data in a queue
-                queue.put((X, y))
-
-            except:
-                print("Nothing here")
-
-        processes = []
-
-        def start_process():
-            for i in range(len(processes), maxproc):
-                thread = multiprocessing.Process(target=producer)
-                time.sleep(0.01)
-                thread.start()
-                processes.append(thread)
-
-        # run as consumer (read items from queue, in current thread)
-        while True:
-            processes = [p for p in processes if p.is_alive()]
-
-            if len(processes) < maxproc:
-                start_process()
-
-            yield queue.get()
-
-    except:
-        print("Finishing")
-        for th in processes:
-            th.terminate()
-        queue.close()
-        raise
-
 
