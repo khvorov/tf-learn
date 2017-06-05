@@ -1,18 +1,26 @@
 import argparse
+import base64
+import eventlet
+import eventlet.wsgi
 import h5py
+import numpy as np
 import os
 import shutil
 import socketio
-import eventlet
-import eventlet.wsgi
+import utils
 
+from PIL import Image
 from flask import Flask
+from io import BytesIO
 from keras import __version__ as keras_version
 from keras.models import load_model
 
 sio = socketio.Server()
 app = Flask(__name__)
 model = None
+
+MIN_SPEED, MAX_SPEED = 2, 15
+speed_limit = MAX_SPEED
 
 @sio.on('connect')
 def connect(sid, env):
@@ -25,12 +33,23 @@ def telemetry(sid, data):
         sio.emit('manual', data={}, sid=True)
         return
 
-    steering_angle = float(data['steering_angle'])
+    steering_angle = data['steering_angle']
     throttle = data['throttle']
-    speed = data['speed']
+    speed = float(data['speed'])
 
-    print('telemetry: {0}, {1}, {2}'.format(steering_angle, throttle, speed))
-    send_control(str(steering_angle-0.05), 0.1)
+    # get the image
+    image = np.asarray(Image.open(BytesIO(base64.b64decode(data['image']))))
+    image = utils.preprocess(image)
+    image = np.array([image])
+    steering_angle = float(model.predict(image, batch_size=1))
+
+    global speed_limit
+    speed_limit = MIN_SPEED if speed > speed_limit else MAX_SPEED
+    throttle = 1.0 - steering_angle**2 - (speed / speed_limit)**2
+
+    print('{} {} {}'.format(steering_angle, throttle, speed))
+
+    send_control(steering_angle, throttle)
 
 def send_control(steering_angle, throttle):
     sio.emit('steer',

@@ -42,7 +42,7 @@ def build_model(args):
 
 def train_model(args, model, X_train, X_test, y_train, y_test):
     checkpoint = ModelCheckpoint('model-{epoch:03d}.h5', monitor='val_loss', verbose=0, save_best_only=args.save_best_only, mode='auto')
-    model.compile(loss='mean_squared_error', optimizer=Nadam()) # Adagrad(lr=args.learning_rate))
+    model.compile(loss='mean_squared_error', optimizer=Adam(lr=args.learning_rate))
 
     model.fit_generator(batch_generator(args.data_dir, X_train, y_train, args.batch_size, True),
                         args.samples_per_epoch,
