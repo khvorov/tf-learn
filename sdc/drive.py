@@ -19,7 +19,7 @@ sio = socketio.Server()
 app = Flask(__name__)
 model = None
 
-MIN_SPEED, MAX_SPEED = 2, 15
+MIN_SPEED, MAX_SPEED = 2, 20
 speed_limit = MAX_SPEED
 
 @sio.on('connect')

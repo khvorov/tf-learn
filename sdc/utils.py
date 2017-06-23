@@ -109,7 +109,7 @@ def batch_generator(data_dir, image_paths, steering_angles, batch_size, is_train
     images = np.empty([batch_size, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS])
     steers = np.empty(batch_size)
 
-    num_workers = 4
+    num_workers = 8
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=num_workers)
 
     while True:
